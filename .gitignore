@@ -1,0 +1,12 @@
+*.exe
+*.asar
+*.jsc
+*.backup
+*.backup.*
+stage/
+Output/
+orig_registry/
+*.log
+__pycache__/
+.DS_Store
+Thumbs.db
