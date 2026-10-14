@@ -18,10 +18,11 @@ macOS 版直接改 Mach-O 里 `LicenseManager` 的 3 个方法;Windows 版是 El
 
 | Mac 补丁 | Mac 方法 | Windows 对应实现(本补丁) | 效果 |
 |:---:|------|------|------|
-| 1 | `cannotContonueUse:` 恒返回 0 | 拦截 `native-reg.getValue`,读注册表 `IDate`(试用起点)时恒返回当天日期 | `dayRemains` 恒为满额(15 天),试用永不过期,多标签/继续使用不受限 |
+| 1 | `cannotContonueUse:` 恒返回 0 | ① 拦截 `native-reg.getValue`,读注册表 `IDate`(试用起点)时恒返回当天日期;② fs 钩子改写 `userData/profile.data` 的 `_iD` 字段(见补丁 5) | `dayRemains` 恒为满额(15 天),试用永不过期,多标签/新建/新建窗口不受限 |
 | 2 | `showLicense:` 静默返回 | 拦截 `BrowserWindow.loadURL`,丢弃 `license.html` 的加载并隐藏空壳窗口 | 不再弹出许可证/购买窗口 |
 | 3 | `showLicenseIfNeeded` 静默返回 | 同上(启动时 `needLicense=true` 的弹窗走同一路径,已验证被拦截) | 启动无弹窗 |
 | 4 | (macOS 无对应) | 字节补丁 .jsc 水印片段: 把 `if(window.File.option){` 改为 `if(window.File.optio0){` | 移除左下角"未激活/UNREGISTERED"按钮(含叉号),新窗口不再出现 |
+| 5 | (macOS 无对应) | fs 钩子改写 `%APPDATA%\Typora\profile.data` 里 `_iD`(防篡改安装日期副本,hex 编码 JSON)为当天,**读取与写入双向** | **试用天数真正不衰减**;不修则试用到期后 Typora 锁掉"新建/新建窗口" |
 | — | (macOS 无此层) | fs 钩子:读 `app.asar/launch.dist.js` 时返回剥掉补丁标记的原始内容 | 绕过 `[LC]` 启动自检,否则应用秒退 |
 
 补丁本体在 `patch_main.js`,由注入后的 `launch.dist.js` 在 `require("./atom.compiled.dist.jsc")`

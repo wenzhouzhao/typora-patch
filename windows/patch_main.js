@@ -55,6 +55,49 @@
     return s.indexOf("app.asar") >= 0 && /launch\.dist\.js$/.test(s);
   }
 
+  /* ---- 安装日期防篡改副本: profile.data 里的 "_iD" ----
+   * 除了注册表 IDate, Typora 还在 userData/profile.data 里留了一份
+   * "incorrupted InstallDate"(_iD, 十六进制编码的 JSON), 试用天数按它算,
+   * 且它优先于注册表值 —— 只覆盖注册表读取不足以让试用永不过期。
+   * 这里对 profile.data 的读取返回 _iD=今天, 写入时也强制改写为今天。 */
+  function isProfilePath(p) {
+    return /(^|[\\/])profile\.data$/.test(String(p));
+  }
+  function fixProfileJson(json) {
+    var out = json.replace(/("_iD"\s*:\s*")[^"]*(")/, "$1" + todayMUSA() + "$2");
+    return out;
+  }
+  function patchProfileData(buf) {
+    try {
+      var isStr = typeof buf === "string";
+      if (!isStr && !Buffer.isBuffer(buf)) return buf;
+      var s = (isStr ? buf : buf.toString("utf8")).trim();
+      if (!/^[0-9a-fA-F]+$/.test(s)) return buf;          // 不是 hex 编码就放弃
+      var json = Buffer.from(s, "hex").toString("utf8");
+      if (json.indexOf('"_iD"') < 0) return buf;
+      var fixed = fixProfileJson(json);
+      if (fixed === json) return buf;
+      L("profile.data _iD -> today on read");
+      var hexOut = Buffer.from(fixed, "utf8").toString("hex");
+      return isStr ? hexOut : Buffer.from(hexOut, "utf8");
+    } catch (e) { L("profile patch err", e && e.message); return buf; }
+  }
+  function patchProfileWrite(buf) {
+    try {
+      var isStr = typeof buf === "string";
+      if (!isStr && !Buffer.isBuffer(buf)) return buf;
+      var hex = (isStr ? buf : buf.toString("utf8")).trim();
+      if (!/^[0-9a-fA-F]+$/.test(hex)) return buf;         // 只处理 hex 形式
+      var json = Buffer.from(hex, "hex").toString("utf8");
+      if (json.indexOf('"_iD"') < 0) return buf;
+      var fixed = fixProfileJson(json);
+      if (fixed === json) return buf;
+      L("profile.data _iD -> today on write");
+      var hexOut = Buffer.from(fixed, "utf8").toString("hex");
+      return isStr ? hexOut : Buffer.from(hexOut, "utf8");
+    } catch (e) { return buf; }
+  }
+
   var Module = require("module");
   var origLoad = Module._load;
   Module._load = function (request, parent, isMain) {
@@ -92,9 +135,24 @@
           var out = origRFS.apply(this, arguments);
           try {
             if (isLaunchPath(p)) { out = pristineLaunch(out); L("readFileSync launch.dist.js -> pristine"); }
+            else if (isProfilePath(p)) { out = patchProfileData(out); }
           } catch (e) {}
           return out;
         };
+        var origWFS = m.writeFileSync;
+        if (typeof origWFS === "function") {
+          m.writeFileSync = function (p, data, opt) {
+            try {
+              if (isProfilePath(p)) {
+                var d2 = patchProfileWrite(data);
+                var a2 = Array.prototype.slice.call(arguments);
+                a2[1] = d2;
+                return origWFS.apply(this, a2);
+              }
+            } catch (e) {}
+            return origWFS.apply(this, arguments);
+          };
+        }
         if (m.promises && m.promises.readFile) {
           var origPFR = m.promises.readFile;
           m.promises.readFile = function (p, opt) {
@@ -104,8 +162,25 @@
                 L("promises.readFile launch.dist.js -> pristine");
                 return pr.then(function (v) { return pristineLaunch(v); });
               }
+              if (isProfilePath(p)) {
+                return pr.then(function (v) { return patchProfileData(v); });
+              }
             } catch (e) {}
             return pr;
+          };
+        }
+        if (m.promises && m.promises.writeFile) {
+          var origPWF = m.promises.writeFile;
+          m.promises.writeFile = function (p, data, opt) {
+            try {
+              if (isProfilePath(p)) {
+                var d3 = patchProfileWrite(data);
+                var a3 = Array.prototype.slice.call(arguments);
+                a3[1] = d3;
+                return origPWF.apply(this, a3);
+              }
+            } catch (e) {}
+            return origPWF.apply(this, arguments);
           };
         }
         L("fs hooked");

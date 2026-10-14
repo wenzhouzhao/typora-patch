@@ -124,7 +124,7 @@ console.log("launch.dist.js 已注入 patch_main.js 引用" + (BUNDLE ? " (相�
 // ---------- 3. 重打包 ----------
 if (BUNDLE) {
   contents["patch_main.js"] = fs.readFileSync(path.join(__dirname, "patch_main.js"));
-  order.push("patch_main.js");
+  if (order.indexOf("patch_main.js") < 0) order.push("patch_main.js");  // 重复打包时避免重复条目
   console.log("patch_main.js 已作为独立文件打入 app.asar");
 }
 const entries = {};
