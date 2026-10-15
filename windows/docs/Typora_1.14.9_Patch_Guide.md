@@ -92,7 +92,8 @@ node patch_typora.js "<Typora安装目录>"
 
 ## 五、预打补丁安装包 (免 Node, 装完即用)
 
-**成品**: `Typora_1.14.9_Patched_Setup.exe` (113.7MB, Inno Setup 打包)
+**成品**: `<项目根目录>\Typora_1.14.10_Patched_Setup.exe` (113.7MB, Inno Setup 打包;
+文件名随打包版本变化, 规则 `Typora_<版本>_Patched_Setup.exe`)
 
 - 原版安装器即 Inno Setup (6.0.0) 构建, 本包用 6.0.5 编译器产出, 安装行为一致
 - **AppId 与原版相同** `{37771A20-7167-44C0-B322-FD3E54C56156}`:
@@ -102,7 +103,7 @@ node patch_typora.js "<Typora安装目录>"
   **目标机器不需要 Node.js, 装完即打完补丁**
 - 文件关联与原版一致: md/markdown/mdown/mkd/mmd/text 六种扩展名 (HKLM, 卸载时清理)
 - 快捷方式: 公共桌面 (与原版一致; 无开始菜单项)
-- 静默安装: `Typora_1.14.9_Patched_Setup.exe /VERYSILENT /NORESTART [/DIR="D:\xxx"]`
+- 静默安装: `Typora_1.14.10_Patched_Setup.exe /VERYSILENT /NORESTART [/DIR="D:\xxx"]`
 - 需管理员权限 (写 HKLM 关联与 Program Files)
 
 ### 重新构建 (换 Typora 版本时)
@@ -185,7 +186,54 @@ copy /y resources\app.asar.backup.<时间戳> resources\app.asar
   无需重跑补丁脚本。
 - **不要移动 patch_main.js**: 就地补丁模式下 launch.dist.js 写的是它的绝对路径;
   如需移动,重跑 `node patch_typora.js`(会更新注入路径)。
-- **仅适用于 1.14.9**: 其他版本的 launch.dist.js 结构、`[LC]` 自检、
-  asar 完整性值与试用状态来源都可能不同。
+- **适用版本见第九节**: 1.14.9 与 1.14.10 均已实测,方法完全相同;
+  其他版本请按第九节的流程先核对再打。
 - 调试: 设环境变量 `TYPORA_PATCH_DEBUG=1`,日志写 `%TEMP%\typora_patch.log`。
 - 左下角"未激活"角标为 Typora 正常试用态 UI,与本补丁无关(macOS 补丁同样不处理)。
+
+---
+
+## 九、版本适配记录(不同版本是否需要不同方法)
+
+### 已实测版本
+
+| 项 | 1.14.9 (基线) | 1.14.10 (2026-10-15 实测) | 是否需要改方法 |
+|---|---|---|---|
+| asar 结构 | 3 文件:package.json / launch.dist.js / atom.compiled.dist.jsc | **完全相同**(3 文件) | 否 |
+| `launch.dist.js` | 1381 B,sha256 `3ec9df88…` | **逐字节相同**(长度与 sha256 一致) | 否 —— 注入锚点 `require("./atom.compiled.dist.jsc");` 原样存在 |
+| `atom.compiled.dist.jsc` | 388352 B | 388344 B(小 8 B) | 否 —— 锚点整体位移约 8 字节,结构不变 |
+| jsc 锚点 | 许可页 `license.html`、`IDate`、`dayRemains`、`UNREGISTERED`、水印赋值锚 `File.option.hasLicense = false;`、条件锚 `if(window.File.option){` | 全部命中(偏移见 find_anchors 输出) | 否 —— 水印字节补丁同长度替换照常生效 |
+| exe 内嵌完整性串 | `{"file":"resources\\app.asar","alg":"SHA256","value":…}` | 格式相同,仅 value 不同 | 否 |
+| 试用状态来源 | 注册表 `IDate` + `profile.data` 的 `_iD` | **两者都在用**(hook 均命中;`profile.data` 的 uuid 也沿用) | 否 |
+| `[LC]` 启动自检 | 读 `app.asar/launch.dist.js` 比对 | 相同 | 否 |
+| 实测结果 | 试用 15 天、无弹窗、无水印、新建/新建窗口正常 | 同左(hook 日志与 typora.log 均确认) | — |
+
+**结论:1.14.9 → 1.14.10 属于"只改 jsc 内容"的常规更新,方法完全不变,
+补丁脚本未改一行代码即可套用。**
+
+### 遇到新版本时的核对流程(约 2 分钟)
+
+```bat
+:: 1) 静态锚点核对(会列出所有依赖的锚点是否命中)
+python patch_1.14.9_win\tools\find_anchors.py <Typora安装目录>
+
+:: 2) 直接打补丁(带锚点校验, 对不上会中止而不是打坏文件)
+node patch_1.14.9_win\patch_typora.js <Typora安装目录>
+
+:: 3) 验证: 带调试日志启动, 看 hook 是否全部命中
+set TYPORA_PATCH_DEBUG=1
+::   %TEMP%\typora_patch.log 应有: override IDate / profile.data _iD -> today /
+::   blocked license window / launch.dist.js -> pristine
+::   %APPDATA%\Typora\typora.log 应有: trail remains: 15 days
+```
+
+### 什么情况才需要改方法(按变化类型对号)
+
+| 新版变化 | 表现 | 需要做的事 |
+|---|---|---|
+| jsc 内容变化(最常见,如 1.14.10) | 锚点偏移变化但字符串仍在 | **无需改动**,直接重打(脚本自带锚点校验) |
+| 水印片段改写法(锚点字符串变了) | 脚本报 `未在水印片段定位锚点` / `水印片段条件与预期不符` | 在 jsc 里重新定位(搜 `UNREGISTERED` / `hasLicense`),更新 `patch_typora.js` 里的锚点常量 |
+| 入口结构变化(`launch.dist.js` 不再是明文入口/加载器改写) | 脚本报 `launch.dist.js 结构与预期不符` | 按 `通用方法论.md` §三 路线 A/B 重新设计注入点 |
+| 完整性机制变化(新增校验层/换哈希算法) | 启动 1 秒退出、日志有 `Integrity check failed` | 按 `Typora_1.14.9_Patch_Guide.md` §三 重新处理校验层 |
+| 试用状态来源变化(键名/新增来源) | `trail remains` 不随覆盖变化 | 按 `通用方法论.md` §三 路线 C「状态往往不止一份」重新定位 |
+| 架构变化(不再是 Electron / asar) | `find_anchors.py` 第 2 步就报缺失 | 整套方法不适用,需按新架构重新评估 |

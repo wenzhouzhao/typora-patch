@@ -1,5 +1,7 @@
 ; ============================================================
-; Typora 1.14.9 (Windows x64) — patched build
+; Typora (Windows x64) — patched build
+; Payload version follows {#MyAppVersion} below; the same patch kit
+; applies to 1.14.9 and 1.14.10 (see docs: 版本适配记录).
 ; Inno Setup script, mirrors the original 6.0.0-built installer:
 ;   - same AppId, same file set, Public Desktop shortcut,
 ;     HKLM file associations for md/markdown/mdown/mkd/mmd/text
@@ -8,7 +10,7 @@
 ; ============================================================
 
 #define MyAppName "Typora"
-#define MyAppVersion "1.14.9"
+#define MyAppVersion "1.14.10"
 #define MyAppPublisher "abnerworks"
 #define MyAppExeName "Typora.exe"
 #define StageRoot "stage\app"
@@ -26,7 +28,7 @@ ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename=Typora_1.14.9_Patched_Setup
+OutputBaseFilename=Typora_{#MyAppVersion}_Patched_Setup
 SetupIconFile={#StageRoot}\resources\assets\installer.ico
 Compression=lzma2/max
 SolidCompression=yes
