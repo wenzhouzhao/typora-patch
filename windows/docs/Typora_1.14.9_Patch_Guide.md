@@ -141,6 +141,26 @@ suppressed show of license shell                 ← 弹窗空壳被隐藏
 typora.log: `installDate is 9/4/2026, trail remains: 15 days`,应用正常启动,
 连续打开两个 md 文件均为正常标签页,无任何许可证弹窗,长时间运行不退出。
 
+### 追加验证:安装日期第二来源 (2026-10-15 实测)
+
+上面那次验证成立有个隐含前提:**当天就是安装日**(9/4),所以注册表覆盖看起来"够用"。
+41 天后(10/15)试用被判过期,暴露出第二个来源 —— Typora 把安装日期另存了一份
+在 `%APPDATA%\Typora\profile.data`(`_iD` 字段,hex 编码 JSON,jsc 中叫
+"incorrupted InstallDate"),**试用天数按它算**,只覆盖注册表无效:
+
+```
+override IDate | 9/4/2026 -> | 10/15/2026     ← 注册表读取覆盖成功
+[L] installDate is 9/4/2026, trail remains: 0 days   ← 但权威值来自 profile.data
+
+# 修复后(把磁盘上的 _iD 故意留成旧日期,考验钩子):
+profile.data _iD -> today on read
+[L] installDate is 10/15/2026, trail remains: 15 days
+```
+
+试用过期时 Typora 会**静默禁用**"文件→新建 / 新建窗口"(点了无任何反应,不报错),
+许可证提示窗口又被本补丁藏掉,所以表面上"什么都没发生"。修复后
+Ctrl+N 新建文档、Ctrl+Shift+N 新建窗口均实测可用。
+
 ## 七、恢复
 
 ```
@@ -155,11 +175,17 @@ copy /y resources\app.asar.backup.<时间戳> resources\app.asar
 
 - **更新后需重新打补丁**: Typora 自动更新会替换 Typora.exe 与 app.asar,补丁失效,
   重新运行 `patch.bat` 即可(脚本幂等)。
+- **试用天数有两个来源**: 注册表 `IDate` 与 `%APPDATA%\Typora\profile.data` 的 `_iD`
+  (防篡改副本,权威)。补丁对两者都做了覆盖(后者由 `patch_main.js` 在 fs 读/写上强制改写)。
+  排查"试用像是过期了"时,先看 typora.log 的 `trail remains: N days` 再动手。
+- **Typora 拒绝调试启动参数**: 传 `--remote-debugging-port` 等会弹
+  `Arguments not allowed debug in production main thread` 并退出;
+  排查请用 `TYPORA_PATCH_DEBUG=1` 日志,不要指望 CDP/远程调试。
 - **patch_main.js 可随时改**: 它是 asar 外部的明文 JS,改完重启 Typora 生效,
   无需重跑补丁脚本。
 - **不要移动 patch_main.js**: 就地补丁模式下 launch.dist.js 写的是它的绝对路径;
-   如需移动,重跑 `node patch_typora.js`(会更新注入路径)。
-- **仅适用于 1.14.9**: 其他版本的 launch.dist.js 结构、`[LC]` 自检与
-  asar 完整性值都可能不同。
+  如需移动,重跑 `node patch_typora.js`(会更新注入路径)。
+- **仅适用于 1.14.9**: 其他版本的 launch.dist.js 结构、`[LC]` 自检、
+  asar 完整性值与试用状态来源都可能不同。
 - 调试: 设环境变量 `TYPORA_PATCH_DEBUG=1`,日志写 `%TEMP%\typora_patch.log`。
 - 左下角"未激活"角标为 Typora 正常试用态 UI,与本补丁无关(macOS 补丁同样不处理)。
