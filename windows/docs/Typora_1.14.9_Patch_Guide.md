@@ -170,7 +170,14 @@ copy /y Typora.exe.backup.<时间戳> Typora.exe
 copy /y resources\app.asar.backup.<时间戳> resources\app.asar
 ```
 
+⚠ **多代备份要选对版本**:Typora 更新过之后,安装目录里会同时存在不同版本的
+纯净备份(每次重打补丁生成一对)。`Typora.exe` 与 `app.asar` 必须取自**同一对**,
+否则是"旧版 exe 配新版 asar",启动即失败。
+**例**(本机):`*.backup.20260904052906` = 1.14.9 原版;
+`*.backup.20261015125915` = 1.14.10 原版。
+
 注册表(如需): `HKCU\Software\Typora` 的 `IDate`/`SLicense`。
+试用副本(如需): `%APPDATA%\Typora\profile.data` 的 `_iD`(见 §八)。
 
 ## 八、注意事项
 
